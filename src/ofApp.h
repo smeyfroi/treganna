@@ -31,25 +31,13 @@ public:
   void gotMessage(ofMessage msg) override;
   
 private:
+  void updateRecentNotes(float s, float t, float u, float v);
+  void updateClusters();
 
-  // bells
-//    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-//      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav",
-//                                                           "Jam-20240517-155805463/____-80_41_155_x_22141.oscs") };
-
-  // nightsong
-    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav",
-                                                           "Jam-20240402-094851837/____-46_137_90_x_22141.oscs") };
-
-  // treganna
-//  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-//    std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav",
-//                                                         "Jam-20240719-093508910/____-92_9_186_x_22141.oscs") };
-
-  std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr { std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr) };
-  std::shared_ptr<ofxAudioData::Plots> audioDataPlotsPtr { std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr) };
-  std::shared_ptr<ofxAudioData::SpectrumPlots> audioDataSpectrumPlotsPtr { std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr) };
+  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr;
+  std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr;
+  std::shared_ptr<ofxAudioData::Plots> audioDataPlotsPtr;
+  std::shared_ptr<ofxAudioData::SpectrumPlots> audioDataSpectrumPlotsPtr;
 
   DividedArea dividedArea { {1.0, 1.0}, 7 };
 

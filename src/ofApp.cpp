@@ -7,6 +7,16 @@ void ofApp::setup(){
   ofSetFrameRate(Constants::FRAME_RATE);
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
   
+  // nightsong
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
+  // bells
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+  // treganna
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
+  audioDataProcessorPtr = std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr);
+  audioDataPlotsPtr = std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr);
+  audioDataSpectrumPlotsPtr = std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr);
+
   audioParameters.add(validLowerRmsParameter);
   audioParameters.add(validLowerPitchParameter);
   audioParameters.add(validUpperPitchParameter);
@@ -34,6 +44,55 @@ void ofApp::setup(){
 }
 
 //--------------------------------------------------------------
+void ofApp::updateRecentNotes(float s, float t, float u, float v) {
+  TS_START("update-recent-notes");
+  if (recentNoteXYs.size() > clusterSourceSamplesMaxParameter) {
+    recentNoteXYs.erase(recentNoteXYs.end() - clusterSourceSamplesMaxParameter/10, recentNoteXYs.end());
+  }
+  recentNoteXYs.push_back({ s, t });
+  introspector.addCircle(s, t, 1.0/Constants::WINDOW_WIDTH*5.0, ofColor::yellow, true, 30); // introspection: small yellow circle for new raw source sample
+  TS_STOP("update-recent-notes");
+}
+
+void ofApp::updateClusters() {
+  std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>> clusterResults;
+  
+  TS_START("update-kmeans");
+  if (recentNoteXYs.size() > clusterCentresParameter) {
+    dkm::clustering_parameters<float> params { static_cast<uint32_t>(clusterCentresParameter) };
+    params.set_random_seed(1000); // keep clusters stable
+    clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
+  }
+  TS_STOP("update-kmeans");
+  
+  TS_START("update-clusterCentres");
+  {
+    // glm::vec4 w is age
+    // add to clusterCentres from new clusters
+    for (const auto& cluster : std::get<0>(clusterResults)) {
+      float x = cluster[0]; float y = cluster[1];
+      // find a similar existing cluster
+      auto it = std::find_if(clusterCentres.begin(),
+                             clusterCentres.end(),
+                             [x, y, this](const glm::vec4& p) {
+        return ((std::abs(p.x-x) < sameClusterToleranceParameter) && (std::abs(p.y-y) < sameClusterToleranceParameter));
+      });
+      if (it == clusterCentres.end()) {
+        // don't have this clusterCentre so make it
+        clusterCentres.push_back({ x, y, 0.0, 1.0 }); // start at age=1
+        introspector.addCircle(x, y, 15.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: small red circle is new cluster centre
+      } else {
+        // close to an existing one, so move existing cluster a little towards the new one
+        it->x = ofLerp(x, it->x, 0.05);
+        // existing cluster so increase its age to preserve it
+        it->w++;
+        introspector.addCircle(it->x, it->y, 3.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 25); // introspection: large red circle is existing cluster centre that continues to exist
+      }
+    }
+  }
+  TS_STOP("update-clusterCentres");
+}
+
 void ofApp::update(){
   TS_START("update-introspection");
   introspector.update();
@@ -53,49 +112,9 @@ void ofApp::update(){
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, false, validLowerPitchParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, true, validUpperPitchParameter}
   };
-
   if (audioDataProcessorPtr->isDataValid(sampleValiditySpecs)) {
-    
-    TS_START("maintain-recent-notes");
-    if (recentNoteXYs.size() > clusterSourceSamplesMaxParameter) {
-      recentNoteXYs.erase(recentNoteXYs.end() - clusterSourceSamplesMaxParameter/10, recentNoteXYs.end());
-    }
-    recentNoteXYs.push_back({ s, t });
-    introspector.addCircle(s, t, 1.0/Constants::WINDOW_WIDTH*5.0, ofColor::yellow, true, 30); // introspection: small yellow circle for new raw source sample
-    TS_STOP("maintain-recent-notes");
-
-    std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>> clusterResults;
-    TS_START("update-kmeans");
-    if (recentNoteXYs.size() > clusterCentresParameter) {
-      dkm::clustering_parameters<float> params(clusterCentresParameter);
-      params.set_random_seed(1000); // keep clusters stable
-      clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
-    }
-    TS_STOP("update-kmeans");
-    
-    TS_START("update-clusterCentres");
-    {
-      // glm::vec4 w is age
-      // add to clusterCentres from new clusters
-      for (const auto& cluster : std::get<0>(clusterResults)) {
-        float x = cluster[0]; float y = cluster[1];
-        auto it = std::find_if(clusterCentres.begin(),
-                               clusterCentres.end(),
-                               [x, y, this](const glm::vec4& p) {
-          return ((std::abs(p.x-x) < sameClusterToleranceParameter) && (std::abs(p.y-y) < sameClusterToleranceParameter));
-        });
-        if (it == clusterCentres.end()) {
-          // don't have this clusterCentre so make it
-          clusterCentres.push_back({ x, y, 0.0, 1.0 }); // start at age=1
-          introspector.addCircle(x, y, 15.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: small red circle is new cluster centre
-        } else {
-          // existing cluster so increase its age to preserve it
-          it->w++;
-          introspector.addCircle(it->x, it->y, 3.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 25); // introspection: large red circle is existing cluster centre that continues to exist
-        }
-      }
-    }
-    TS_STOP("update-clusterCentres");
+    updateRecentNotes(s, t, u, v);
+    updateClusters();
   }
   
   TS_START("decay-clusterCentres");
@@ -110,7 +129,7 @@ void ofApp::update(){
   TS_STOP("decay-clusterCentres");
   
   TS_START("update-divider");
-  bool _ = dividedArea.updateUnconstrainedDividerLines(clusterCentres, {(size_t)ofRandom(clusterCentres.size()), (size_t)ofRandom(clusterCentres.size())});
+  bool _ = dividedArea.updateUnconstrainedDividerLines(clusterCentres);
   if (recentNoteXYs.size() > 2) {
     dividedArea.clearConstrainedDividerLines();
     for (auto iter = recentNoteXYs.cbegin(); iter != recentNoteXYs.cend() - 1; iter++) {
