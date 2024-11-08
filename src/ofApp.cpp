@@ -93,6 +93,19 @@ void ofApp::updateClusters() {
   TS_STOP("update-clusterCentres");
 }
 
+void ofApp::decayClusters() {
+  TS_START("decay-clusters");
+  for (auto& p: clusterCentres) {
+    p.w *= clusterDecayRateParameter;
+  }
+  // delete decayed clusterCentres
+  clusterCentres.erase(std::remove_if(clusterCentres.begin(),
+                                      clusterCentres.end(),
+                                      [](const glm::vec4& n) { return n.w <= 1.0; }),
+                       clusterCentres.end());
+  TS_STOP("decay-clusters");
+}
+
 void ofApp::update(){
   TS_START("update-introspection");
   introspector.update();
@@ -115,27 +128,18 @@ void ofApp::update(){
   if (audioDataProcessorPtr->isDataValid(sampleValiditySpecs)) {
     updateRecentNotes(s, t, u, v);
     updateClusters();
+    decayClusters();
   }
-  
-  TS_START("decay-clusterCentres");
-  for (auto& p: clusterCentres) {
-    p.w *= clusterDecayRateParameter;
-  }
-  // delete decayed clusterCentres
-  clusterCentres.erase(std::remove_if(clusterCentres.begin(),
-                                      clusterCentres.end(),
-                                      [](const glm::vec4& n) { return n.w <= 1.0; }),
-                       clusterCentres.end());
-  TS_STOP("decay-clusterCentres");
   
   TS_START("update-divider");
-  bool _ = dividedArea.updateUnconstrainedDividerLines(clusterCentres);
+  bool majorDividersChanged = dividedArea.updateUnconstrainedDividerLines(clusterCentres);
   if (recentNoteXYs.size() > 2) {
-    dividedArea.clearConstrainedDividerLines();
-    for (auto iter = recentNoteXYs.cbegin(); iter != recentNoteXYs.cend() - 1; iter++) {
-      auto p1 = *iter; auto p2 = *(iter + 1);
-      dividedArea.addConstrainedDividerLine({p1[0], p1[1]}, {p2[0], p2[1]});
-    }
+    auto p1 = *(recentNoteXYs.end()-1);
+    auto p2 = *(recentNoteXYs.end()-2);
+    dividedArea.addConstrainedDividerLine({p1[0], p1[1]}, {p2[0], p2[1]});
+  }
+  if (dividedArea.constrainedDividerLines.size() > 500) {
+    dividedArea.deleteEarlyConstrainedDividerLines(1);
   }
   TS_STOP("update-divider");
   

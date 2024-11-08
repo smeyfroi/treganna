@@ -33,6 +33,7 @@ public:
 private:
   void updateRecentNotes(float s, float t, float u, float v);
   void updateClusters();
+  void decayClusters();
 
   std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr;
   std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr;
