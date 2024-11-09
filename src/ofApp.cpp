@@ -84,6 +84,7 @@ void ofApp::updateClusters() {
       } else {
         // close to an existing one, so move existing cluster a little towards the new one
         it->x = ofLerp(x, it->x, 0.05);
+        it->y = ofLerp(y, it->y, 0.05);
         // existing cluster so increase its age to preserve it
         it->w++;
         introspector.addCircle(it->x, it->y, 3.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 25); // introspection: large red circle is existing cluster centre that continues to exist
