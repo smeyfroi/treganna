@@ -35,7 +35,8 @@ private:
   void updateClusters();
   void decayClusters();
 
-  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr;
+//  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr;
+  std::shared_ptr<ofxAudioAnalysisClient::LocalGistClient> audioAnalysisClientPtr;
   std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr;
   std::shared_ptr<ofxAudioData::Plots> audioDataPlotsPtr;
   std::shared_ptr<ofxAudioData::SpectrumPlots> audioDataSpectrumPlotsPtr;
@@ -54,23 +55,23 @@ private:
   ofParameterGroup parameters;
   
   ofParameterGroup audioParameters { "audio" };
-  ofParameter<float> validLowerRmsParameter { "validLowerRms", 300.0, 100.0, 5000.0 };
+  ofParameter<float> validLowerRmsParameter { "validLowerRms", 0.001, 0.0, 0.10 };
   ofParameter<float> validLowerPitchParameter { "validLowerPitch", 50.0, 50.0, 8000.0 };
   ofParameter<float> validUpperPitchParameter { "validUpperPitch", 5000.0, 50.0, 8000.0 };
-  ofParameter<float> minPitchParameter { "minPitch", 200.0, 0.0, 8000.0 };
-  ofParameter<float> maxPitchParameter { "maxPitch", 1800.0, 0.0, 8000.0 };
-  ofParameter<float> minRMSParameter { "minRMS", 0.0, 0.0, 6000.0 };
-  ofParameter<float> maxRMSParameter { "maxRMS", 4600.0, 0.0, 6000.0 };
-  ofParameter<float> minSpectralKurtosisParameter { "minSpectralKurtosis", 0.0, 0.0, 6000.0 };
-  ofParameter<float> maxSpectralKurtosisParameter { "maxSpectralKurtosis", 25.0, 0.0, 6000.0 };
-  ofParameter<float> minSpectralCentroidParameter { "minCentroidKurtosis", 0.4, 0.0, 10.0 };
-  ofParameter<float> maxSpectralCentroidParameter { "maxCentroidKurtosis", 6.0, 0.0, 10.0 };
+  ofParameter<float> minPitchParameter { "minPitch", 150.0, 0.0, 8000.0 };
+  ofParameter<float> maxPitchParameter { "maxPitch", 1500.0, 0.0, 8000.0 };
+  ofParameter<float> minRMSParameter { "minRMS", 0.0, 0.0, 1.0 };
+  ofParameter<float> maxRMSParameter { "maxRMS", 0.1, 0.0, 0.1 };
+  ofParameter<float> minSpectralCrestParameter { "minSpectralCrest", 0.0, 0.0, 6000.0 };
+  ofParameter<float> maxSpectralCrestParameter { "maxSpectralCrest", 25.0, 0.0, 6000.0 };
+  ofParameter<float> minSpectralCentroidParameter { "minSpectralCentroid", 0.4, 0.0, 10.0 };
+  ofParameter<float> maxSpectralCentroidParameter { "maxSpectralCentroid", 6.0, 0.0, 10.0 };
 
   ofParameterGroup clusterParameters { "cluster" };
-  ofParameter<int> clusterCentresParameter { "clusterCentres", 12, 2.0, 50.0 };
-  ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 3000, 1000, 8000 }; // Note: 1600 raw samples per frame at 30fps
+  ofParameter<int> clusterCentresParameter { "clusterCentres", 17, 2.0, 60.0 };
+  ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 12000, 1000, 48000 }; // Note: 1600 raw samples per frame at 30fps
   ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 0.94, 0.0, 1.0 };
-  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.1, 0.01, 1.0 };
+  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.4, 0.01, 1.0 };
   ofParameter<int> sampleNoteClustersParameter { "sampleNoteClusters", 7, 1, 20 };
   ofParameter<int> sampleNotesParameter { "sampleNotes", 7, 1, 20 };
 

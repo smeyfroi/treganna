@@ -10,9 +10,16 @@ void ofApp::setup(){
   // nightsong
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
   // bells
-  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
   // treganna
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
+  // prokofiev
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20241129-100248316/____-46_137_90_x_22141-0-1.wav", "Jam-20241129-100248316/____-46_137_90_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20241129-100248316/____-46_137_90_x_22141-0-1.wav", "Jam-20241129-100248316/____-46_137_90_x_22141.oscs");
+  // guitar
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20250102-133009535/____-46_137_90_x_22141-0-1.wav", "Jam-20250102-133009535/____-46_137_90_x_22141.oscs");
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::LocalGistClient>(ofToDataPath("recording.wav"));
+
   audioDataProcessorPtr = std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr);
   audioDataPlotsPtr = std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr);
   audioDataSpectrumPlotsPtr = std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr);
@@ -24,8 +31,8 @@ void ofApp::setup(){
   audioParameters.add(maxPitchParameter);
   audioParameters.add(minRMSParameter);
   audioParameters.add(maxRMSParameter);
-  audioParameters.add(minSpectralKurtosisParameter);
-  audioParameters.add(maxSpectralKurtosisParameter);
+  audioParameters.add(minSpectralCrestParameter);
+  audioParameters.add(maxSpectralCrestParameter);
   audioParameters.add(minSpectralCentroidParameter);
   audioParameters.add(maxSpectralCentroidParameter);
   parameters.add(audioParameters);
@@ -43,11 +50,16 @@ void ofApp::setup(){
   ofxTimeMeasurements::instance()->setEnabled(false);
 }
 
+void ofApp::exit() {
+  audioAnalysisClientPtr->closeStream();
+}
+
 //--------------------------------------------------------------
 void ofApp::updateRecentNotes(float s, float t, float u, float v) {
   TS_START("update-recent-notes");
   if (recentNoteXYs.size() > clusterSourceSamplesMaxParameter) {
-    recentNoteXYs.erase(recentNoteXYs.end() - clusterSourceSamplesMaxParameter/10, recentNoteXYs.end());
+    // erase oldest 10% of the max
+    recentNoteXYs.erase(recentNoteXYs.begin(), recentNoteXYs.begin() + clusterSourceSamplesMaxParameter/10);
   }
   recentNoteXYs.push_back({ s, t });
   introspector.addCircle(s, t, 1.0/Constants::WINDOW_WIDTH*5.0, ofColor::yellow, true, 30); // introspection: small yellow circle for new raw source sample
@@ -55,10 +67,12 @@ void ofApp::updateRecentNotes(float s, float t, float u, float v) {
 }
 
 void ofApp::updateClusters() {
+  if (recentNoteXYs.size() <= clusterCentresParameter) return;
+
   std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>> clusterResults;
   
   TS_START("update-kmeans");
-  if (recentNoteXYs.size() > clusterCentresParameter) {
+  {
     dkm::clustering_parameters<float> params { static_cast<uint32_t>(clusterCentresParameter) };
     params.set_random_seed(1000); // keep clusters stable
     clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
@@ -70,24 +84,25 @@ void ofApp::updateClusters() {
     // glm::vec4 w is age
     // add to clusterCentres from new clusters
     for (const auto& cluster : std::get<0>(clusterResults)) {
-      float x = cluster[0]; float y = cluster[1];
+      float x = cluster[0]; float y = cluster[1]; // replacing with a structured binding here requires c++20 for the lambda capture below
       // find a similar existing cluster
       auto it = std::find_if(clusterCentres.begin(),
                              clusterCentres.end(),
                              [x, y, this](const glm::vec4& p) {
-        return ((std::abs(p.x-x) < sameClusterToleranceParameter) && (std::abs(p.y-y) < sameClusterToleranceParameter));
+        return (glm::distance2(static_cast<glm::vec2>(p), {x, y}) < sameClusterToleranceParameter);
+//        return ((std::abs(p.x-x) < sameClusterToleranceParameter) && (std::abs(p.y-y) < sameClusterToleranceParameter));
       });
       if (it == clusterCentres.end()) {
         // don't have this clusterCentre so make it
         clusterCentres.push_back({ x, y, 0.0, 1.0 }); // start at age=1
-        introspector.addCircle(x, y, 15.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: small red circle is new cluster centre
+        introspector.addCircle(x, y, 7.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: large red circle is new cluster centre
       } else {
         // close to an existing one, so move existing cluster a little towards the new one
-        it->x = ofLerp(x, it->x, 0.05);
-        it->y = ofLerp(y, it->y, 0.05);
+        it->x = ofLerp(x, it->x, 0.3);
+        it->y = ofLerp(y, it->y, 0.3);
         // existing cluster so increase its age to preserve it
         it->w++;
-        introspector.addCircle(it->x, it->y, 3.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 25); // introspection: large red circle is existing cluster centre that continues to exist
+        introspector.addCircle(it->x, it->y, 2.0*1.0/Constants::WINDOW_WIDTH, ofColor::darkRed, true, 25); // introspection: smalli darkRed circle is existing cluster centre that continues to exist
       }
     }
   }
@@ -116,20 +131,23 @@ void ofApp::update(){
   audioDataProcessorPtr->update();
   TS_STOP("update-audoanalysis");
 
+  updateClusters();
+  decayClusters();
+
   float s = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::pitch, minPitchParameter, maxPitchParameter);// 700.0, 1300.0);
   float t = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, minRMSParameter, maxRMSParameter); ////400.0, 4000.0, false);
-  float u = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralKurtosis, minSpectralKurtosisParameter, maxSpectralKurtosisParameter);
+  float u = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralCrest, minSpectralCrestParameter, maxSpectralCrestParameter);
   float v = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralCentroid, minSpectralCentroidParameter, maxSpectralCentroidParameter);
-  
+
   std::vector<ofxAudioData::ValiditySpec> sampleValiditySpecs {
     {ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, false, validLowerRmsParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, false, validLowerPitchParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, true, validUpperPitchParameter}
   };
+  
   if (audioDataProcessorPtr->isDataValid(sampleValiditySpecs)) {
+
     updateRecentNotes(s, t, u, v);
-    updateClusters();
-    decayClusters();
   }
   
   TS_START("update-divider");
@@ -137,10 +155,12 @@ void ofApp::update(){
   if (recentNoteXYs.size() > 2) {
     auto p1 = *(recentNoteXYs.end()-1);
     auto p2 = *(recentNoteXYs.end()-2);
-    dividedArea.addConstrainedDividerLine({p1[0], p1[1]}, {p2[0], p2[1]});
+    if (p1[0] != p2[0] && p1[1] != p2[1]) {
+      dividedArea.addConstrainedDividerLine({p1[0], p1[1]}, {p2[0], p2[1]});
+    }
   }
-  if (dividedArea.constrainedDividerLines.size() > 500) {
-    dividedArea.deleteEarlyConstrainedDividerLines(1);
+  if (dividedArea.constrainedDividerLines.size() > 5000) {
+    dividedArea.deleteEarlyConstrainedDividerLines(50);
   }
   TS_STOP("update-divider");
   
@@ -150,7 +170,11 @@ void ofApp::update(){
       plot.addLine(l.start.x, l.start.y, l.end.x, l.end.y, ofColor::black, 2);
     }
     for(auto& l : dividedArea.constrainedDividerLines) {
-      plot.addLine(l.start.x, l.start.y, l.end.x, l.end.y, ofColor::grey, 2);
+      float len = glm::distance(glm::vec2 { l.start.x, l.start.y }, glm::vec2 { l.end.x, l.end.y });
+      ofColor c = ofColor::red;
+      if (len < 0.1) c = ofColor::pink;
+      else if (len < 0.5) c = ofColor::hotPink;
+      plot.addLine(l.start.x, l.start.y, l.end.x, l.end.y, c, 2);
     }
     for (auto& p: clusterCentres) {
       if (p.w < 10.0) continue;
@@ -187,7 +211,7 @@ void ofApp::draw(){
     ofPushView();
     ofEnableBlendMode(OF_BLENDMODE_ADD);
     float plotHeight = ofGetWindowHeight() / 4.0;
-    audioDataPlotsPtr->drawPlots(ofGetWindowWidth(), plotHeight);
+    audioDataPlotsPtr->drawPlots();
     audioDataSpectrumPlotsPtr->draw();
     ofPopView();
     ofPopStyle();
@@ -198,18 +222,13 @@ void ofApp::draw(){
 }
 
 //--------------------------------------------------------------
-void ofApp::exit(){
-
-}
-
-//--------------------------------------------------------------
 void ofApp::keyPressed(int key){
   if (audioAnalysisClientPtr->keyPressed(key)) return;
   if (key == OF_KEY_TAB) guiVisible = not guiVisible;
   {
     float plotHeight = ofGetWindowHeight() / 4.0;
     int plotIndex = ofGetMouseY() / plotHeight;
-    bool plotKeyPressed = audioDataPlotsPtr->keyPressed(key, plotIndex);
+    bool plotKeyPressed = audioDataPlotsPtr->keyPressed(key);
     bool spectrumPlotKeyPressed = audioDataSpectrumPlotsPtr->keyPressed(key);
     if (plotKeyPressed || spectrumPlotKeyPressed) return;
   }
